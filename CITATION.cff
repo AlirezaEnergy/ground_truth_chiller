@@ -1,0 +1,12 @@
+cff-version: 1.2.0
+message: "If you use this code, please cite it using the following metadata."
+title: "ground_truth_chiller"
+authors:
+  - family-names: "Ghadertootoonchi"
+    given-names: "Alireza"
+  - family-names: "Lee"
+    given-names: "Seungjae"
+version: "1.0.0"
+doi: "10.5281/zenodo.17664545"
+date-released: "2025-01-20"
+repository-code: "https://github.com/AlirezaEnergy/ground_truth_chiller"
