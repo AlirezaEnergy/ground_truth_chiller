@@ -1,6 +1,6 @@
 cff-version: 1.2.0
 message: "If you use this code, please cite it using the following metadata."
-title: "Ground Truth Chiller"
+title: "Detailed Chiller Model"
 authors:
   - family-names: "Ghadertootoonchi"
     given-names: "Alireza"
