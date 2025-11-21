@@ -1,4 +1,4 @@
-# Ground Truth Chiller Model
+# Detailed Chiller Model
 
 This repository contains a detailed physics-based model of a vapor compression chiller.  
 It includes sub-models for:
