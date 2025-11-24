@@ -1,7 +1,9 @@
 from CoolProp.CoolProp import PropsSI
 from CoolProp.HumidAirProp import HAPropsSI
 import math
-
+from scipy.stats.qmc import LatinHypercube
+import numpy as np
+import pandas as pd
 
 
 ### supply fan model
@@ -369,11 +371,88 @@ def ground_truth_chiller(outdoor_temp,
     
     return output_dict
 
+### generate samples using Latin hypercube
+
+def sample_generator(sample_size, random_seed):
+
+    barometric_pressure = 101325.0    # [Pa] equal to 1 atm
+
+    sampler = LatinHypercube(d = 5, seed = random_seed) # Create LHS sampler
+    raw = sampler.random(n = sample_size) # Generate samples (in [0, 1])
+
+    ranges = {
+        "outdoor_temp": (-20, 35),
+        "supply_air_temp": (8, 16),
+        "supply_air_mass_flowrate": (1.33*0.1, 1.33),
+        "RHmix": (0.1, 0.9),
+        "delta_Tmix": (0.5, 10) # so the coil inlet will be between 8.5 and 26 C
+        # at wors case scenario all return air is coming from the zone which has a maximum temperature of around 24
+        # so it does not make sense to have like 36, 40 C in the inlet
+    }
+
+    columns = list(ranges.keys())
+    mapped = np.zeros_like(raw)
+    for i, col in enumerate(columns):
+        a, b = ranges[col]
+        mapped[:, i] = a + raw[:, i] * (b - a)
+
+    df = pd.DataFrame(mapped, columns=columns)
+    df["Tmix"] = df["supply_air_temp"] + df["delta_Tmix"]
+    df = df.drop('delta_Tmix', axis=1)
 
 
 
+    # Create a list to store all chiller results
+    results_list = []
+    for _, row in df.iterrows():
+        # Extract sampled variables
+        outdoor_temp = row["outdoor_temp"]
+        supply_air_temp = row["supply_air_temp"]
+        supply_air_mass_flowrate = row["supply_air_mass_flowrate"]
+        Tmix = row["Tmix"]
+        RHmix = row["RHmix"]
+
+        # --- Psychrometric calculations ---
+        # 1. Saturation humidity ratio at supply air temp (used as a reference)
+        supply_air_saturation_humidity_ratio = HAPropsSI("W", "T", supply_air_temp + 273.15, "P", barometric_pressure, "RH", 1.0)
+
+        # 2. For the mixed air:
+        humidity_ratio_mix = HAPropsSI("W", "T", Tmix + 273.15, "P", barometric_pressure, "RH", RHmix)
+        Tdew_mix = HAPropsSI("Tdp", "T", Tmix + 273.15, "P", barometric_pressure, "RH", RHmix) - 273.15 # [C]
+        enthalpy_mix = HAPropsSI("H", "T", Tmix + 273.15, "P", barometric_pressure, "RH", RHmix)  # J/kg dry air
+
+        # --- Prepare chiller inputs ---
+        inputs = {
+            "outdoor_temp": outdoor_temp,
+            "supply_air_mass_flowrate": supply_air_mass_flowrate,
+            "supply_air_temp": supply_air_temp,
+            "supply_air_saturation_humidity_ratio": supply_air_saturation_humidity_ratio,
+            "Tmix": Tmix,
+            "Tdew_mix": Tdew_mix,
+            "humidity_ratio_mix": humidity_ratio_mix,
+            "enthalpy_mix": enthalpy_mix
+        }
+
+        # --- Run your detailed model ---
+        results = ground_truth_chiller(**inputs)  # ← your existing detailed function
+
+        # Combine both inputs and results for logging
+        results_entry = {**inputs, **results}
+        results_list.append(results_entry)
+
+    # --- Create final DataFrame ---
+    results_df = pd.DataFrame(results_list)
+
+    return results_df
 
 
+### usage
+
+sample_size = 1000
+random_seed = 42
+results_df = sample_generator(sample_size, random_seed)
+
+results_df = results_df[results_df["Qe"] != -10] # exclude the samples for which the chiller is not ON
 
 
 
